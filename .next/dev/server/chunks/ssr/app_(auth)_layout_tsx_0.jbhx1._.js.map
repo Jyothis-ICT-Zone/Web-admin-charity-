@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///F:/charity/Web-admin-charity-/app/%28auth%29/layout.tsx"],"sourcesContent":["export default function AdminAuthLayout({\r\n  children,\r\n}: {\r\n  children: React.ReactNode;\r\n}) {\r\n  return <div className=\"min-h-screen w-full\">{children}</div>;\r\n}\r\n"],"names":["AdminAuthLayout","children","className"],"mappings":";;;;;;AAAe,SAASA,gBAAgB,EACtCC,QAAQ,EAGT;IACC,qBAAO,8OAAC;QAAIC,WAAU;kBAAuBD;;;;;;AAC/C"}}]
+}
