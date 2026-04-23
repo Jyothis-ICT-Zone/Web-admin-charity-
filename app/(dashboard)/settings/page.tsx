@@ -41,6 +41,8 @@ export default function AdminSettingsPage() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"success" | "error">("success");
 
   useEffect(() => {
     listSettings()
@@ -65,6 +67,14 @@ export default function AdminSettingsPage() {
       .finally(() => setHasLoaded(true));
   }, []);
 
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [toastMessage]);
+
   const toPayload = () => ({
     header: {
       siteName: headerTitle,
@@ -84,15 +94,22 @@ export default function AdminSettingsPage() {
   });
 
   const saveAll = async () => {
-    const payload = toPayload();
-    if (settingsId) {
-      await updateSettings(settingsId, payload);
-    } else {
-      const created = await createSettings(payload);
-      const createdId = created?.data?._id;
-      if (createdId) setSettingsId(createdId);
+    try {
+      const payload = toPayload();
+      if (settingsId) {
+        await updateSettings(settingsId, payload);
+      } else {
+        const created = await createSettings(payload);
+        const createdId = created?.data?._id;
+        if (createdId) setSettingsId(createdId);
+      }
+      window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
+      setToastType("success");
+      setToastMessage("Saved successfully.");
+    } catch {
+      setToastType("error");
+      setToastMessage("Save failed. Please try again.");
     }
-    window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
   };
 
   const onCoverChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -108,21 +125,15 @@ export default function AdminSettingsPage() {
   };
 
   const saveHeader = () => {
-    saveAll().catch(() => {
-      // ignore save error
-    });
+    void saveAll();
   };
 
   const saveSocial = () => {
-    saveAll().catch(() => {
-      // ignore save error
-    });
+    void saveAll();
   };
 
   const saveContactDetails = () => {
-    saveAll().catch(() => {
-      // ignore save error
-    });
+    void saveAll();
   };
 
   if (!hasLoaded) {
@@ -135,6 +146,19 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="space-y-4">
+      {toastMessage ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed left-1/2 top-1/2 z-50 w-[92%] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl px-6 py-4 text-center text-base font-semibold shadow-xl ${
+            toastType === "success"
+              ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {toastMessage}
+        </div>
+      ) : null}
       <nav
         className="box-border flex h-[53px] w-[236px] shrink-0 items-center justify-between rounded-[20px] border border-[#1B734C]/35 bg-white p-[10px] shadow-sm"
         aria-label="Settings sections"
