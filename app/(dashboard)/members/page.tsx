@@ -1,32 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { dispatchCharityDataUpdated } from "@/lib/charity-sync";
+import { createMember, deleteMember, listMembers, updateMember } from "@/lib/api/members";
 
 type MemberCard = {
-  id: number;
+  id: string;
   name: string;
   role: string;
 };
 
 const CARDS_PER_PAGE = 10;
-const MEMBERS_STORAGE_KEY = "charity-admin-members-v1";
 
 const defaultMembers: MemberCard[] = Array.from({ length: 27 }, (_, index) => ({
-  id: index + 1,
+  id: `fallback-${index + 1}`,
   name: "திரு. கணேசன்",
   role: "தலைவர் (President)",
 }));
 
 export default function AdminMembersPage() {
   const [items, setItems] = useState<MemberCard[]>(defaultMembers);
-  const [hasLoadedItems, setHasLoadedItems] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
-  const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
-  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [nameValue, setNameValue] = useState("");
   const [roleValue, setRoleValue] = useState("");
 
@@ -48,37 +46,19 @@ export default function AdminMembersPage() {
     [filteredItems, safeCurrentPage],
   );
 
+  const refreshMembers = () => {
+    return listMembers().then((res) => {
+      setItems((res.data || []).map((m) => ({ id: m._id, name: m.name, role: m.position || "" })));
+    });
+  };
+
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(MEMBERS_STORAGE_KEY);
-      if (raw !== null) {
-        const parsed = JSON.parse(raw) as MemberCard[];
-        if (Array.isArray(parsed)) {
-          setItems(parsed);
-        }
-      }
-    } catch {
-      // Ignore malformed storage.
-    } finally {
-      setHasLoadedItems(true);
-    }
+    refreshMembers()
+      .catch(() => {
+        // keep fallback data
+      })
+      .finally(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!hasLoadedItems) return;
-    try {
-      window.localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(items));
-      dispatchCharityDataUpdated();
-    } catch {
-      // Ignore storage write failures.
-    }
-  }, [items, hasLoadedItems]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
 
   const closeFormModal = () => {
     setIsFormOpen(false);
@@ -112,30 +92,39 @@ export default function AdminMembersPage() {
     setIsSaveConfirmOpen(true);
   };
 
-  const confirmSave = () => {
+  const confirmSave = async () => {
     const name = nameValue.trim();
     const role = roleValue.trim();
     if (!name || !role) return;
 
-    if (editingItemId !== null) {
-      setItems((prev) =>
-        prev.map((item) =>
-          item.id === editingItemId ? { ...item, name, role } : item,
-        ),
-      );
-    } else {
-      const nextId = items.length ? Math.max(...items.map((item) => item.id)) + 1 : 1;
-      setItems((prev) => [...prev, { id: nextId, name, role }]);
+    try {
+      if (editingItemId !== null && !editingItemId.startsWith("fallback-")) {
+        await updateMember(editingItemId, { name, position: role });
+      } else {
+        await createMember({ name, position: role });
+      }
+      await refreshMembers();
+      setIsSaveConfirmOpen(false);
+      closeFormModal();
+    } catch {
+      // ignore API save failure
     }
-
-    setIsSaveConfirmOpen(false);
-    closeFormModal();
   };
 
-  const confirmDeleteCard = () => {
+  const confirmDeleteCard = async () => {
     if (deleteItemId === null) return;
-    setItems((prev) => prev.filter((item) => item.id !== deleteItemId));
-    setDeleteItemId(null);
+    if (deleteItemId.startsWith("fallback-")) {
+      setItems((prev) => prev.filter((item) => item.id !== deleteItemId));
+      setDeleteItemId(null);
+      return;
+    }
+    try {
+      await deleteMember(deleteItemId);
+      await refreshMembers();
+      setDeleteItemId(null);
+    } catch {
+      // ignore API delete failure
+    }
   };
 
   return (

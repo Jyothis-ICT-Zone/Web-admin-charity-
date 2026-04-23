@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { dispatchCharityDataUpdated } from "@/lib/charity-sync";
+import { createAccounting, deleteAccounting, listAccounting, updateAccounting } from "@/lib/api/accounting";
 
 type AccountingCard = {
-  id: number;
+  id: string;
   year: string;
   /** Shown in form preview after upload / when editing */
   pdfFileName?: string;
@@ -13,22 +13,20 @@ type AccountingCard = {
 };
 
 const CARDS_PER_PAGE = 10;
-const ACCOUNTING_STORAGE_KEY = "charity-admin-accounting-v1";
 
 const defaultCards: AccountingCard[] = Array.from({ length: 27 }, (_, index) => ({
-  id: index + 1,
+  id: `fallback-${index + 1}`,
   year: "2020",
 }));
 
 export default function AdminAccountingPage() {
   const [items, setItems] = useState<AccountingCard[]>(defaultCards);
-  const [hasLoadedItems, setHasLoadedItems] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
-  const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   /** When set, form is editing this card; when null, form is add mode */
-  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [titleValue, setTitleValue] = useState("");
   const [pdfName, setPdfName] = useState("");
   const [pdfDataUrl, setPdfDataUrl] = useState<string | null>(null);
@@ -46,37 +44,26 @@ export default function AdminAccountingPage() {
     [items, safeCurrentPage],
   );
 
+  const refreshAccounting = () => {
+    return listAccounting().then((res) => {
+      setItems(
+        (res.data || []).map((x) => ({
+          id: x._id,
+          year: x.title,
+          pdfFileName: x.pdf ? "report.pdf" : undefined,
+          pdfDataUrl: x.pdf || null,
+        })),
+      );
+    });
+  };
+
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(ACCOUNTING_STORAGE_KEY);
-      if (raw !== null) {
-        const parsed = JSON.parse(raw) as AccountingCard[];
-        if (Array.isArray(parsed)) {
-          setItems(parsed);
-        }
-      }
-    } catch {
-      // Ignore malformed storage.
-    } finally {
-      setHasLoadedItems(true);
-    }
+    refreshAccounting()
+      .catch(() => {
+        // keep fallback data
+      })
+      .finally(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!hasLoadedItems) return;
-    try {
-      window.localStorage.setItem(ACCOUNTING_STORAGE_KEY, JSON.stringify(items));
-      dispatchCharityDataUpdated();
-    } catch {
-      // Ignore storage write failures.
-    }
-  }, [items, hasLoadedItems]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
 
   const closeAddModal = () => {
     setIsAddModalOpen(false);
@@ -115,46 +102,43 @@ export default function AdminAccountingPage() {
     setIsSaveConfirmOpen(true);
   };
 
-  const confirmSave = () => {
+  const confirmSave = async () => {
     const trimmedTitle = titleValue.trim();
     if (!trimmedTitle) return;
 
-    const pdfFileName = pdfName.trim() || undefined;
-    const hasPdf = Boolean(pdfName.trim());
+    const payload = {
+      title: trimmedTitle,
+      pdf: pdfDataUrl || "",
+    };
 
-    if (editingItemId !== null) {
-      setItems((prev) =>
-        prev.map((item) => {
-          if (item.id !== editingItemId) return item;
-          return {
-            ...item,
-            year: trimmedTitle,
-            pdfFileName: hasPdf ? pdfFileName : undefined,
-            pdfDataUrl: hasPdf ? pdfDataUrl ?? item.pdfDataUrl : undefined,
-          };
-        }),
-      );
-    } else {
-      const nextId = items.length ? Math.max(...items.map((item) => item.id)) + 1 : 1;
-      setItems((prev) => [
-        ...prev,
-        {
-          id: nextId,
-          year: trimmedTitle,
-          pdfFileName,
-          pdfDataUrl: pdfDataUrl ?? undefined,
-        },
-      ]);
+    try {
+      if (editingItemId !== null && !editingItemId.startsWith("fallback-")) {
+        await updateAccounting(editingItemId, payload);
+      } else {
+        await createAccounting(payload);
+      }
+      await refreshAccounting();
+      setIsSaveConfirmOpen(false);
+      closeAddModal();
+    } catch {
+      // ignore API save failure
     }
-
-    setIsSaveConfirmOpen(false);
-    closeAddModal();
   };
 
-  const confirmDeleteCard = () => {
+  const confirmDeleteCard = async () => {
     if (deleteItemId === null) return;
-    setItems((prev) => prev.filter((item) => item.id !== deleteItemId));
-    setDeleteItemId(null);
+    if (deleteItemId.startsWith("fallback-")) {
+      setItems((prev) => prev.filter((item) => item.id !== deleteItemId));
+      setDeleteItemId(null);
+      return;
+    }
+    try {
+      await deleteAccounting(deleteItemId);
+      await refreshAccounting();
+      setDeleteItemId(null);
+    } catch {
+      // ignore API delete failure
+    }
   };
 
   return (
@@ -395,7 +379,7 @@ export default function AdminAccountingPage() {
             <p className="mx-auto mt-4 max-w-[300px] text-center text-[16px] font-medium leading-[1.35] text-[#1a3d31]">
               This will permanently delete the item.
               <br />
-              You can't recover it later.
+              You can&apos;t recover it later.
             </p>
             <div className="mt-5 flex items-center justify-center gap-3">
               <button

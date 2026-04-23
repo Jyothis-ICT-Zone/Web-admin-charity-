@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
-import { dispatchCharityDataUpdated } from "@/lib/charity-sync";
+import { createService, deleteService, listServices, updateService } from "@/lib/api/services";
 
 function cropImageWithArea(
   source: string,
@@ -31,7 +31,7 @@ function cropImageWithArea(
 type CropMode = "drag" | "resize" | null;
 type CropTarget = "cover" | "gallery";
 type ServiceItem = {
-  id: number;
+  id: string;
   title: string;
   subtitle: string;
   description: string;
@@ -43,10 +43,9 @@ type ServiceItem = {
 };
 
 const PREVIEW_SIZE = 360;
-const SERVICES_STORAGE_KEY = "charity-admin-services-v1";
 const CARDS_PER_PAGE = 10;
 const DEFAULT_ITEMS: ServiceItem[] = Array.from({ length: 10 }, (_, index) => ({
-  id: index + 1,
+  id: `fallback-${index + 1}`,
   title: "கல்வி உதவித்தொகை",
   subtitle: "அமரர் சின்னத்துரை அவர்களின் ......",
   description:
@@ -58,9 +57,8 @@ const DEFAULT_ITEMS: ServiceItem[] = Array.from({ length: 10 }, (_, index) => ({
 export default function AdminServicesPage() {
   const [items, setItems] = useState<ServiceItem[]>(DEFAULT_ITEMS);
   const [currentPage, setCurrentPage] = useState(1);
-  const [hasLoadedItems, setHasLoadedItems] = useState(false);
-  const [editingItemId, setEditingItemId] = useState<number | null>(null);
-  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addStep, setAddStep] = useState<1 | 2>(1);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
@@ -73,7 +71,7 @@ export default function AdminServicesPage() {
   const [facebookLink, setFacebookLink] = useState("");
   const [youtubeLink, setYoutubeLink] = useState("");
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
-  const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [cropTarget, setCropTarget] = useState<CropTarget>("cover");
   const [coverImageWidth, setCoverImageWidth] = useState(1000);
   const [coverImageHeight, setCoverImageHeight] = useState(1000);
@@ -200,13 +198,40 @@ export default function AdminServicesPage() {
     setAddStep(1);
   };
 
-  const askDelete = (id: number) => {
+  const askDelete = (id: string) => {
     setDeleteItemId(id);
   };
 
-  const confirmDelete = () => {
+  const refreshServices = () => {
+    return listServices().then((res) => {
+      setItems(
+        (res.data || []).map((x) => ({
+          id: x._id,
+          title: x.title,
+          subtitle: `${(x.description || "").slice(0, 42)}${(x.description || "").length > 42 ? "..." : ""}`,
+          description: x.description || "",
+          coverImage: x.coverImage || "/picture/project.jpg",
+          galleryImages: x.galleryImages?.length ? x.galleryImages : ["/picture/view image.png"],
+          instagramLink: (x.socialPostLinks || []).find((k) => (k.label || "").toLowerCase() === "instagram")?.url || "",
+          facebookLink: (x.socialPostLinks || []).find((k) => (k.label || "").toLowerCase() === "facebook")?.url || "",
+          youtubeLink: (x.socialPostLinks || []).find((k) => (k.label || "").toLowerCase() === "youtube")?.url || "",
+        })),
+      );
+    });
+  };
+
+  const confirmDelete = async () => {
     if (deleteItemId === null) return;
-    setItems((prev) => prev.filter((item) => item.id !== deleteItemId));
+    if (deleteItemId.startsWith("fallback-")) {
+      setItems((prev) => prev.filter((item) => item.id !== deleteItemId));
+    } else {
+      try {
+        await deleteService(deleteItemId);
+        await refreshServices();
+      } catch {
+        // ignore API delete failure
+      }
+    }
     if (selectedItemId === deleteItemId) {
       setSelectedItemId(null);
     }
@@ -247,60 +272,41 @@ export default function AdminServicesPage() {
     setIsAddModalOpen(true);
   };
 
-  const handleSaveConfirmed = () => {
+  const handleSaveConfirmed = async () => {
     const normalizedDescription = descriptionValue.trim();
-    const nextItem: ServiceItem = {
-      id: editingItemId ?? Date.now(),
+    const payload = {
       title: titleValue.trim(),
-      subtitle: `${normalizedDescription.slice(0, 42)}${normalizedDescription.length > 42 ? "..." : ""}`,
       description: normalizedDescription,
       coverImage: coverImageCropped ?? "/picture/project.jpg",
       galleryImages: galleryImages.length > 0 ? galleryImages : ["/picture/view image.png"],
-      instagramLink: instagramLink.trim(),
-      facebookLink: facebookLink.trim(),
-      youtubeLink: youtubeLink.trim(),
+      socialPostLinks: [
+        ...(instagramLink.trim() ? [{ label: "Instagram", url: instagramLink.trim() }] : []),
+        ...(facebookLink.trim() ? [{ label: "Facebook", url: facebookLink.trim() }] : []),
+        ...(youtubeLink.trim() ? [{ label: "YouTube", url: youtubeLink.trim() }] : []),
+      ],
     };
 
-    if (editingItemId !== null) {
-      setItems((prev) => prev.map((item) => (item.id === editingItemId ? nextItem : item)));
-    } else {
-      setItems((prev) => [...prev, nextItem]);
-      setCurrentPage(Math.ceil((items.length + 1) / CARDS_PER_PAGE));
+    try {
+      if (editingItemId !== null && !editingItemId.startsWith("fallback-")) {
+        await updateService(editingItemId, payload);
+      } else {
+        await createService(payload);
+      }
+      await refreshServices();
+      closeAllAddModals();
+      resetAddForm();
+    } catch {
+      // ignore API save failure
     }
-    closeAllAddModals();
-    resetAddForm();
   };
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(SERVICES_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as ServiceItem[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setItems(parsed);
-      }
-    } catch {
-      // Ignore malformed local storage.
-    } finally {
-      setHasLoadedItems(true);
-    }
+    refreshServices()
+      .catch(() => {
+        // keep fallback data
+      })
+      .finally(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!hasLoadedItems) return;
-    try {
-      window.localStorage.setItem(SERVICES_STORAGE_KEY, JSON.stringify(items));
-      dispatchCharityDataUpdated();
-    } catch {
-      // Ignore storage write failures.
-    }
-  }, [items, hasLoadedItems]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
 
   const startCropDrag = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();

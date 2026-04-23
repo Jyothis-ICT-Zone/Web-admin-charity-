@@ -2,10 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-const ADMIN_EMAIL = "admin@charity.org";
-const ADMIN_PASSWORD = "Admin@123";
-const AUTH_KEY = "charity-admin-auth";
+import { loginAdmin } from "@/lib/api/auth";
+import { isAdminLoggedIn, setAdminSession } from "@/lib/auth/session";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -14,26 +12,23 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const alreadyLoggedIn = window.sessionStorage.getItem(AUTH_KEY) === "true";
+    const alreadyLoggedIn = isAdminLoggedIn();
     if (alreadyLoggedIn) {
       router.replace("/services");
     }
   }, [router]);
 
-  
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const validEmail = email.trim().toLowerCase() === ADMIN_EMAIL;
-    const validPassword = password === ADMIN_PASSWORD;
-
-    if (!validEmail || !validPassword) {
-      setError("Invalid email or password.");
-      return;
+    try {
+      setError("");
+      const res = await loginAdmin(email.trim().toLowerCase(), password);
+      setAdminSession(res.token);
+      router.replace("/services");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid email or password.");
     }
-
-    window.sessionStorage.setItem(AUTH_KEY, "true");
-    router.replace("/services");
   };
 
   return (

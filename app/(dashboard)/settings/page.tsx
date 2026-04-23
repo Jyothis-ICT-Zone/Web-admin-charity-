@@ -1,62 +1,16 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
   type ChangeEvent,
 } from "react";
+import { createSettings, listSettings, updateSettings } from "@/lib/api/settings";
 
-const STORAGE_KEY = "charity-admin-settings-v1";
-
-/** Same as user `SITE_SETTINGS_CHANGED_EVENT` — notifies same-origin listeners after save */
 const SETTINGS_CHANGED_EVENT = "charity-settings-changed";
 
 type SettingsTab = "header" | "contact";
-
-type StoredSettings = {
-  headerCover: string | null;
-  headerTitle: string;
-  headerDescription: string;
-  socialInstagram: string;
-  socialFacebook: string;
-  socialYoutube: string;
-  contactPhone: string;
-  contactEmail: string;
-  contactLocation: string;
-};
-
-const defaultStored: StoredSettings = {
-  headerCover: null,
-  headerTitle: "",
-  headerDescription: "",
-  socialInstagram: "",
-  socialFacebook: "",
-  socialYoutube: "",
-  contactPhone: "",
-  contactEmail: "",
-  contactLocation: "",
-};
-
-function loadStored(): StoredSettings {
-  if (typeof window === "undefined") return defaultStored;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultStored;
-    const parsed = JSON.parse(raw) as Partial<StoredSettings> & {
-      contactAddress?: string;
-    };
-    return {
-      ...defaultStored,
-      ...parsed,
-      contactLocation:
-        parsed.contactLocation ?? parsed.contactAddress ?? "",
-    };
-  } catch {
-    return defaultStored;
-  }
-}
 
 /** Cards: white fill; inputs: #FCF9F8 fill, thin gray border */
 const contactFieldClass =
@@ -86,64 +40,60 @@ export default function AdminSettingsPage() {
   const [contactLocation, setContactLocation] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const [settingsId, setSettingsId] = useState<string | null>(null);
 
   useEffect(() => {
-    const s = loadStored();
-    setHeaderCover(s.headerCover);
-    setHeaderTitle(s.headerTitle);
-    setHeaderDescription(s.headerDescription);
-    setSocialInstagram(s.socialInstagram);
-    setSocialFacebook(s.socialFacebook);
-    setSocialYoutube(s.socialYoutube);
-    setContactPhone(s.contactPhone);
-    setContactEmail(s.contactEmail);
-    setContactLocation(s.contactLocation);
-    setHasLoaded(true);
+    listSettings()
+      .then((res) => {
+        const item = (res.data || [])[0];
+        if (!item) return;
+        setSettingsId(item._id);
+        const links = new Map((item.socialLinks || []).map((x) => [x.label, x.url || ""]));
+        setHeaderCover(item.header?.logoUrl || null);
+        setHeaderTitle(item.header?.siteName || "");
+        setHeaderDescription(item.header?.tagline || "");
+        setSocialInstagram(links.get("Instagram") || "");
+        setSocialFacebook(links.get("Facebook") || "");
+        setSocialYoutube(links.get("YouTube") || "");
+        setContactPhone(item.contactDetails?.phone || "");
+        setContactEmail(item.contactDetails?.email || "");
+        setContactLocation(item.contactDetails?.address || "");
+      })
+      .catch(() => {
+        // keep defaults
+      })
+      .finally(() => setHasLoaded(true));
   }, []);
 
-  const persist = useCallback(
-    (patch: Partial<StoredSettings>) => {
-      const next: StoredSettings = {
-        headerCover,
-        headerTitle,
-        headerDescription,
-        socialInstagram,
-        socialFacebook,
-        socialYoutube,
-        contactPhone,
-        contactEmail,
-        contactLocation,
-        ...patch,
-      };
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
-      if (patch.headerCover !== undefined) setHeaderCover(patch.headerCover);
-      if (patch.headerTitle !== undefined) setHeaderTitle(patch.headerTitle);
-      if (patch.headerDescription !== undefined)
-        setHeaderDescription(patch.headerDescription);
-      if (patch.socialInstagram !== undefined)
-        setSocialInstagram(patch.socialInstagram);
-      if (patch.socialFacebook !== undefined)
-        setSocialFacebook(patch.socialFacebook);
-      if (patch.socialYoutube !== undefined)
-        setSocialYoutube(patch.socialYoutube);
-      if (patch.contactPhone !== undefined) setContactPhone(patch.contactPhone);
-      if (patch.contactEmail !== undefined) setContactEmail(patch.contactEmail);
-      if (patch.contactLocation !== undefined)
-        setContactLocation(patch.contactLocation);
+  const toPayload = () => ({
+    header: {
+      siteName: headerTitle,
+      tagline: headerDescription,
+      logoUrl: headerCover || "",
     },
-    [
-      headerCover,
-      headerTitle,
-      headerDescription,
-      socialInstagram,
-      socialFacebook,
-      socialYoutube,
-      contactPhone,
-      contactEmail,
-      contactLocation,
+    socialLinks: [
+      { label: "Instagram", url: socialInstagram },
+      { label: "Facebook", url: socialFacebook },
+      { label: "YouTube", url: socialYoutube },
     ],
-  );
+    contactDetails: {
+      phone: contactPhone,
+      email: contactEmail,
+      address: contactLocation,
+    },
+  });
+
+  const saveAll = async () => {
+    const payload = toPayload();
+    if (settingsId) {
+      await updateSettings(settingsId, payload);
+    } else {
+      const created = await createSettings(payload);
+      const createdId = created?.data?._id;
+      if (createdId) setSettingsId(createdId);
+    }
+    window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
+  };
 
   const onCoverChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -151,33 +101,27 @@ export default function AdminSettingsPage() {
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = typeof reader.result === "string" ? reader.result : null;
-      if (dataUrl) persist({ headerCover: dataUrl });
+      if (dataUrl) setHeaderCover(dataUrl);
     };
     reader.readAsDataURL(file);
     event.target.value = "";
   };
 
   const saveHeader = () => {
-    persist({
-      headerCover,
-      headerTitle,
-      headerDescription,
+    saveAll().catch(() => {
+      // ignore save error
     });
   };
 
   const saveSocial = () => {
-    persist({
-      socialInstagram,
-      socialFacebook,
-      socialYoutube,
+    saveAll().catch(() => {
+      // ignore save error
     });
   };
 
   const saveContactDetails = () => {
-    persist({
-      contactPhone,
-      contactEmail,
-      contactLocation,
+    saveAll().catch(() => {
+      // ignore save error
     });
   };
 
@@ -269,7 +213,7 @@ export default function AdminSettingsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => persist({ headerCover: null })}
+                onClick={() => setHeaderCover(null)}
                 className="grid h-[22px] w-[22px] place-items-center rounded-[8px] border border-red-400"
                 aria-label="Remove cover"
               >

@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
-
-const AUTH_KEY = "charity-admin-auth";
+import { getAdminMe } from "@/lib/api/auth";
+import { clearAdminSession, isAdminLoggedIn } from "@/lib/auth/session";
 
 export default function AdminDashboardLayout({
   children,
@@ -15,12 +15,18 @@ export default function AdminDashboardLayout({
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const loggedIn = window.sessionStorage.getItem(AUTH_KEY) === "true";
+    const loggedIn = isAdminLoggedIn();
     if (!loggedIn) {
       router.replace("/login");
       return;
     }
-    setReady(true);
+
+    getAdminMe()
+      .then(() => setReady(true))
+      .catch(() => {
+        clearAdminSession();
+        router.replace("/login");
+      });
   }, [router]);
 
   if (!ready) {
