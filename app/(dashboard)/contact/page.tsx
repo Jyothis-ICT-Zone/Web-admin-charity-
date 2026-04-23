@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CHARITY_DATA_UPDATED_EVENT, dispatchCharityDataUpdated } from "@/lib/charity-sync";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { deleteContact, listContacts } from "@/lib/api/contact";
 
 type ContactRow = {
-  id: number;
+  id: string;
   fullname: string;
   email: string;
   phone: string;
@@ -12,7 +12,6 @@ type ContactRow = {
 };
 
 const ROWS_PER_PAGE = 10;
-const CONTACT_STORAGE_KEY = "charity-admin-contact-v1";
 
 /** Strip trailing ellipsis (… or ... or ....) so the view modal shows clean full text. */
 function stripTrailingEllipsis(text: string): string {
@@ -27,7 +26,7 @@ const sampleMessage =
 
 /** Demo data — same row content as design (ids differ for keys / delete). */
 const defaultRows: ContactRow[] = Array.from({ length: 27 }, (_, index) => ({
-  id: index + 1,
+  id: `fallback-${index + 1}`,
   fullname: "Kishana Aloe",
   email: "example@gmail.com",
   phone: "07775512445",
@@ -136,11 +135,10 @@ function DetailCard({
 
 export default function AdminContactPage() {
   const [rows, setRows] = useState<ContactRow[]>(defaultRows);
-  const [hasLoaded, setHasLoaded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewRow, setViewRow] = useState<ContactRow | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -163,57 +161,44 @@ export default function AdminContactPage() {
     [filtered, safePage],
   );
 
-  const reloadRowsFromStorage = useCallback(() => {
-    try {
-      const raw = window.localStorage.getItem(CONTACT_STORAGE_KEY);
-      if (raw !== null) {
-        const parsed = JSON.parse(raw) as ContactRow[];
-        if (Array.isArray(parsed)) {
-          setRows(parsed);
-        }
-      }
-    } catch {
-      // ignore
-    }
+  const refreshContacts = () => {
+    return listContacts().then((res) => {
+      setRows(
+        (res.data || []).map((x) => ({
+          id: x._id,
+          fullname: x.fullName,
+          email: x.email,
+          phone: x.phone || "",
+          message: x.message,
+        })),
+      );
+    });
+  };
+
+  useEffect(() => {
+    refreshContacts()
+      .catch(() => {
+        // keep fallback data
+      })
+      .finally(() => {});
   }, []);
 
-  useEffect(() => {
-    reloadRowsFromStorage();
-    setHasLoaded(true);
-  }, [reloadRowsFromStorage]);
-
-  useEffect(() => {
-    const onExternal = () => reloadRowsFromStorage();
-    window.addEventListener(CHARITY_DATA_UPDATED_EVENT, onExternal);
-    window.addEventListener("storage", onExternal);
-    return () => {
-      window.removeEventListener(CHARITY_DATA_UPDATED_EVENT, onExternal);
-      window.removeEventListener("storage", onExternal);
-    };
-  }, [reloadRowsFromStorage]);
-
-  useEffect(() => {
-    if (!hasLoaded) return;
-    try {
-      const next = JSON.stringify(rows);
-      const prev = window.localStorage.getItem(CONTACT_STORAGE_KEY);
-      if (prev === next) return;
-      window.localStorage.setItem(CONTACT_STORAGE_KEY, next);
-      dispatchCharityDataUpdated();
-    } catch {
-      // ignore
-    }
-  }, [rows, hasLoaded]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
-
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteId === null) return;
-    setRows((prev) => prev.filter((r) => r.id !== deleteId));
-    if (viewRow?.id === deleteId) setViewRow(null);
-    setDeleteId(null);
+    if (deleteId.startsWith("fallback-")) {
+      setRows((prev) => prev.filter((r) => r.id !== deleteId));
+      if (viewRow?.id === deleteId) setViewRow(null);
+      setDeleteId(null);
+      return;
+    }
+    try {
+      await deleteContact(deleteId);
+      await refreshContacts();
+      if (viewRow?.id === deleteId) setViewRow(null);
+      setDeleteId(null);
+    } catch {
+      // ignore API delete failure
+    }
   };
 
   return (

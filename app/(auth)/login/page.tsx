@@ -2,38 +2,34 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-const ADMIN_EMAIL = "admin@charity.org";
-const ADMIN_PASSWORD = "Admin@123";
-const AUTH_KEY = "charity-admin-auth";
+import { loginAdmin } from "@/lib/api/auth";
+import { isAdminLoggedIn, setAdminSession } from "@/lib/auth/session";
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const alreadyLoggedIn = window.sessionStorage.getItem(AUTH_KEY) === "true";
+    const alreadyLoggedIn = isAdminLoggedIn();
     if (alreadyLoggedIn) {
       router.replace("/services");
     }
   }, [router]);
 
-  
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const validEmail = email.trim().toLowerCase() === ADMIN_EMAIL;
-    const validPassword = password === ADMIN_PASSWORD;
-
-    if (!validEmail || !validPassword) {
-      setError("Invalid email or password.");
-      return;
+    try {
+      setError("");
+      const res = await loginAdmin(email.trim().toLowerCase(), password);
+      setAdminSession(res.token);
+      router.replace("/services");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid email or password.");
     }
-
-    window.sessionStorage.setItem(AUTH_KEY, "true");
-    router.replace("/services");
   };
 
   return (
@@ -42,7 +38,7 @@ export default function AdminLoginPage() {
       style={{ backgroundImage: "url('/picture/login-bg.jpg')" }}
     >
       <div className="relative flex min-h-screen items-center justify-center px-6 py-10">
-        <div className="h-[379px] w-full max-w-[610px] rounded-[36px] border border-white/35 bg-white/20 px-10 py-12 backdrop-blur-[2px]">
+        <div className="min-h-[430px] w-full max-w-[610px] rounded-[36px] border border-white/35 bg-white/20 px-10 py-12 backdrop-blur-[2px]">
           <h1 className="text-center font-serif text-[30px] font-semibold leading-[40px] text-[#174637]">
             Admin Login
           </h1>
@@ -65,19 +61,52 @@ export default function AdminLoginPage() {
               <label className="mb-2 block text-[28px] font-medium leading-[19px] text-[#2A3E37]">
                 Password
               </label>
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="******"
-                className="h-[39px] w-full max-w-[530px] rounded-full border border-white/90 bg-white px-5 text-[17px] leading-[17px] text-zinc-700 outline-none placeholder:text-[17px] placeholder:leading-[17px] placeholder:text-zinc-400"
-              />
+              <div className="relative w-full max-w-[530px]">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="******"
+                  className="h-[39px] w-full rounded-full border border-white/90 bg-white px-5 pr-12 text-[17px] leading-[17px] text-zinc-700 outline-none placeholder:text-[17px] placeholder:leading-[17px] placeholder:text-zinc-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 transition hover:text-zinc-700"
+                >
+                  {showPassword ? (
+                    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+                      <path
+                        d="M3 3L21 21M10.58 10.58C10.21 10.95 10 11.46 10 12C10 13.1 10.9 14 12 14C12.54 14 13.05 13.79 13.42 13.42M9.88 5.09C10.56 4.86 11.27 4.75 12 4.75C16.5 4.75 20.31 8.06 21.25 12C20.86 13.63 19.98 15.08 18.74 16.17M14.12 18.91C13.44 19.14 12.73 19.25 12 19.25C7.5 19.25 3.69 15.94 2.75 12C3.14 10.37 4.02 8.92 5.26 7.83"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+                      <path
+                        d="M2.75 12C3.69 8.06 7.5 4.75 12 4.75C16.5 4.75 20.31 8.06 21.25 12C20.31 15.94 16.5 19.25 12 19.25C7.5 19.25 3.69 15.94 2.75 12Z"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <circle cx="12" cy="12" r="3.25" stroke="currentColor" strokeWidth="1.8" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
 
-            {error ? (
-              <p className="rounded-xl bg-red-100/90 px-4 py-2 text-base text-red-700">{error}</p>
-            ) : null}
+            <div className="min-h-[52px]">
+              {error ? (
+                <p className="rounded-xl bg-red-100/90 px-4 py-2 text-base text-red-700">{error}</p>
+              ) : null}
+            </div>
 
             <button
               type="submit"
