@@ -26,6 +26,20 @@ const fieldLabelClass = "block text-[13px] font-semibold text-[#1A3D1C]";
 
 const contactSaveClass =
   "mt-8 w-full rounded-full bg-[#1B734C] py-3 text-sm font-semibold text-white transition hover:bg-[#155a3d]";
+const COVER_ASPECT_RATIO = 4.5;
+const COVER_EXPORT_WIDTH = 1800;
+const COVER_EXPORT_HEIGHT = Math.round(COVER_EXPORT_WIDTH / COVER_ASPECT_RATIO);
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const loadImage = (src: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = src;
+  });
 
 export default function AdminSettingsPage() {
   const [tab, setTab] = useState<SettingsTab>("header");
@@ -43,6 +57,10 @@ export default function AdminSettingsPage() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<"success" | "error">("success");
+  const [coverCropSource, setCoverCropSource] = useState<string | null>(null);
+  const [coverCropX, setCoverCropX] = useState(50);
+  const [coverCropY, setCoverCropY] = useState(50);
+  const [coverCropZoom, setCoverCropZoom] = useState(100);
 
   useEffect(() => {
     listSettings()
@@ -112,13 +130,62 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const applyCoverCrop = async () => {
+    if (!coverCropSource) return;
+    try {
+      const img = await loadImage(coverCropSource);
+      const imageAspect = img.width / img.height;
+      const baseCropWidth =
+        imageAspect > COVER_ASPECT_RATIO ? img.height * COVER_ASPECT_RATIO : img.width;
+      const baseCropHeight = baseCropWidth / COVER_ASPECT_RATIO;
+
+      const zoomFactor = clamp(coverCropZoom / 100, 1, 2.5);
+      const cropWidth = baseCropWidth / zoomFactor;
+      const cropHeight = baseCropHeight / zoomFactor;
+      const maxX = Math.max(0, img.width - cropWidth);
+      const maxY = Math.max(0, img.height - cropHeight);
+      const sourceX = (maxX * coverCropX) / 100;
+      const sourceY = (maxY * coverCropY) / 100;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = COVER_EXPORT_WIDTH;
+      canvas.height = COVER_EXPORT_HEIGHT;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas context unavailable");
+      ctx.drawImage(
+        img,
+        sourceX,
+        sourceY,
+        cropWidth,
+        cropHeight,
+        0,
+        0,
+        COVER_EXPORT_WIDTH,
+        COVER_EXPORT_HEIGHT
+      );
+
+      setHeaderCover(canvas.toDataURL("image/jpeg", 0.92));
+      setToastType("success");
+      setToastMessage("Crop applied. Save to publish changes.");
+    } catch {
+      setToastType("error");
+      setToastMessage("Unable to crop image. Please try again.");
+    }
+  };
+
   const onCoverChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = typeof reader.result === "string" ? reader.result : null;
-      if (dataUrl) setHeaderCover(dataUrl);
+      if (dataUrl) {
+        setCoverCropSource(dataUrl);
+        setCoverCropX(50);
+        setCoverCropY(50);
+        setCoverCropZoom(100);
+        setHeaderCover(dataUrl);
+      }
     };
     reader.readAsDataURL(file);
     event.target.value = "";
@@ -219,7 +286,67 @@ export default function AdminSettingsPage() {
           </button>
 
           {headerCover ? (
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex flex-col gap-3">
+              {coverCropSource ? (
+                <div className="overflow-hidden rounded-xl border border-[#23712780] bg-[#FCF9F8] p-3">
+                  <p className="mb-2 text-[12px] font-medium text-[#1f4f2c]">
+                    Crop cover preview
+                  </p>
+                  <div className="relative w-full overflow-hidden rounded-lg border border-zinc-300 bg-zinc-900/20">
+                    <div
+                      className="aspect-[4.5/1] w-full bg-no-repeat"
+                      style={{
+                        backgroundImage: `url(${coverCropSource})`,
+                        backgroundPosition: `${coverCropX}% ${coverCropY}%`,
+                        backgroundSize: `${coverCropZoom}% auto`,
+                      }}
+                    />
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    <label className="text-[11px] text-zinc-700">
+                      Horizontal: {coverCropX}%
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={coverCropX}
+                      onChange={(e) => setCoverCropX(Number(e.target.value))}
+                    />
+                    <label className="text-[11px] text-zinc-700">
+                      Vertical: {coverCropY}%
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={coverCropY}
+                      onChange={(e) => setCoverCropY(Number(e.target.value))}
+                    />
+                    <label className="text-[11px] text-zinc-700">
+                      Zoom: {coverCropZoom}%
+                    </label>
+                    <input
+                      type="range"
+                      min={100}
+                      max={250}
+                      value={coverCropZoom}
+                      onChange={(e) => setCoverCropZoom(Number(e.target.value))}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void applyCoverCrop();
+                      }}
+                      className="mt-1 rounded-lg border border-[#2E835E] px-3 py-1.5 text-[12px] font-medium text-[#2E835E]"
+                    >
+                      Apply crop
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex items-center gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={headerCover}
@@ -237,13 +364,17 @@ export default function AdminSettingsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setHeaderCover(null)}
+                onClick={() => {
+                  setHeaderCover(null);
+                  setCoverCropSource(null);
+                }}
                 className="grid h-[22px] w-[22px] place-items-center rounded-[8px] border border-red-400"
                 aria-label="Remove cover"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/picture/delete.svg" alt="" className="h-3 w-3" />
               </button>
+              </div>
             </div>
           ) : null}
 
