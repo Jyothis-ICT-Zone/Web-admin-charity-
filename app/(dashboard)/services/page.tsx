@@ -70,6 +70,7 @@ export default function AdminServicesPage() {
   const [instagramLink, setInstagramLink] = useState("");
   const [facebookLink, setFacebookLink] = useState("");
   const [youtubeLink, setYoutubeLink] = useState("");
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [cropTarget, setCropTarget] = useState<CropTarget>("cover");
@@ -193,6 +194,7 @@ export default function AdminServicesPage() {
     galleryImages.length > 0;
 
   const closeAllAddModals = () => {
+    setIsPreviewOpen(false);
     setIsSaveConfirmOpen(false);
     setIsAddModalOpen(false);
     setAddStep(1);
@@ -252,6 +254,7 @@ export default function AdminServicesPage() {
     setFacebookLink("");
     setYoutubeLink("");
     setCoverImageRaw(null);
+    setIsPreviewOpen(false);
     setIsCropModalOpen(false);
     setCropMode(null);
   };
@@ -260,6 +263,7 @@ export default function AdminServicesPage() {
     setSelectedItemId(null);
     setIsSaveConfirmOpen(false);
     setIsCropModalOpen(false);
+    setIsPreviewOpen(false);
     setEditingItemId(item.id);
     setTitleValue(item.title);
     setDescriptionValue(item.description);
@@ -390,6 +394,7 @@ export default function AdminServicesPage() {
             onClick={() => {
               setSelectedItemId(null);
               setIsCropModalOpen(false);
+              setIsPreviewOpen(false);
               setEditingItemId(null);
               setAddStep(1);
               setIsAddModalOpen(true);
@@ -673,7 +678,17 @@ export default function AdminServicesPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsSaveConfirmOpen(true)}
+                    onClick={() => setIsPreviewOpen(true)}
+                    className="h-[31px] flex-1 rounded-full border border-[#268257] bg-[#F9F5F0] text-[11px] font-medium text-[#268257]"
+                  >
+                    Preview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPreviewOpen(false);
+                      setIsSaveConfirmOpen(true);
+                    }}
                     className="h-[31px] flex-1 rounded-full bg-[#268257] text-[11px] font-medium text-white"
                   >
                     Save
@@ -681,6 +696,53 @@ export default function AdminServicesPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {isPreviewOpen ? (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/55 p-4">
+          <div className="w-full max-w-[450px] rounded-[24px] bg-white p-5 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-[12px] text-zinc-500">User side preview</p>
+                <h3 className="text-[18px] font-semibold text-[#1f4f2c]">Before save preview</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPreviewOpen(false)}
+                className="grid h-8 w-8 place-items-center rounded-lg bg-[#f5f5f5] text-xl leading-none text-[#1f4f2c]"
+              >
+                ×
+              </button>
+            </div>
+
+            <article className="overflow-hidden rounded-[24px] bg-white shadow-md ring-1 ring-black/[0.08]">
+              <div className="h-[180px] w-full overflow-hidden rounded-t-[24px] bg-emerald-100/40">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={coverImageCropped ?? "/picture/project.jpg"}
+                  alt={titleValue || "Service preview"}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="space-y-2 p-4">
+                <h4 className="break-words text-[17px] font-bold leading-[1.4] text-[#1A2F21]">
+                  {titleValue.trim() || "Service title preview"}
+                </h4>
+                <p className="line-clamp-6 break-words text-sm leading-[1.65] text-[#265239]">
+                  {descriptionValue.trim() || "Service description preview will appear here once you type it."}
+                </p>
+              </div>
+            </article>
+
+            <button
+              type="button"
+              onClick={() => setIsPreviewOpen(false)}
+              className="mt-4 h-[38px] w-full rounded-full bg-[#268257] text-[13px] font-medium text-white"
+            >
+              Back to edit
+            </button>
           </div>
         </div>
       ) : null}
