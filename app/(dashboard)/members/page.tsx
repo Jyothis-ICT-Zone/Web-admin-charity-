@@ -22,6 +22,7 @@ export default function AdminMembersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export default function AdminMembersPage() {
 
   const closeFormModal = () => {
     setIsFormOpen(false);
+    setIsPreviewOpen(false);
     setIsSaveConfirmOpen(false);
     setEditingItemId(null);
     setNameValue("");
@@ -69,6 +71,7 @@ export default function AdminMembersPage() {
   };
 
   const openAddModal = () => {
+    setIsPreviewOpen(false);
     setIsSaveConfirmOpen(false);
     setEditingItemId(null);
     setNameValue("");
@@ -77,6 +80,7 @@ export default function AdminMembersPage() {
   };
 
   const openEditModal = (card: MemberCard) => {
+    setIsPreviewOpen(false);
     setIsSaveConfirmOpen(false);
     const latest = items.find((item) => item.id === card.id) ?? card;
     setEditingItemId(latest.id);
@@ -89,6 +93,7 @@ export default function AdminMembersPage() {
     const name = nameValue.trim();
     const role = roleValue.trim();
     if (!name || !role) return;
+    setIsPreviewOpen(false);
     setIsSaveConfirmOpen(true);
   };
 
@@ -261,14 +266,62 @@ export default function AdminMembersPage() {
                 />
               </div>
 
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewOpen(true)}
+                  className="h-[42px] w-full rounded-full border border-[#268257] bg-white text-[14px] font-medium text-[#268257] shadow-sm"
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFormSubmit}
+                  className="h-[42px] w-full rounded-full bg-[#268257] text-[14px] font-medium text-white shadow-sm transition hover:bg-[#206f4a]"
+                >
+                  {editingItemId !== null ? "Save" : "Add"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isPreviewOpen ? (
+        <div className="fixed inset-0 z-[55] grid place-items-center bg-black/50 px-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-[430px] rounded-[20px] border border-black/[0.06] bg-[#F9F5F0] px-6 py-5 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-[12px] text-zinc-500">User side preview</p>
+                <h3 className="text-[18px] font-semibold text-[#1f4f2c]">Before save preview</h3>
+              </div>
               <button
                 type="button"
-                onClick={handleFormSubmit}
-                className="mt-2 h-[42px] w-full rounded-full bg-[#268257] text-[14px] font-medium text-white shadow-sm transition hover:bg-[#206f4a]"
+                onClick={() => setIsPreviewOpen(false)}
+                className="grid h-8 w-8 place-items-center rounded-full border border-zinc-300 bg-white/80 text-lg leading-none text-zinc-600"
               >
-                {editingItemId !== null ? "Save" : "Add"}
+                ×
               </button>
             </div>
+
+            <article className="mx-auto flex h-[169px] w-full max-w-[260px] flex-col overflow-hidden rounded-[26px] border border-zinc-300 bg-white px-3 py-[10px] shadow-sm">
+              <div className="flex h-[98px] flex-col items-center justify-center px-1 text-center">
+                <h3 className="text-[17px] font-semibold leading-tight text-[#1f4f2c]">
+                  {nameValue.trim() || "Member name preview"}
+                </h3>
+                <p className="mt-1 text-[14px] font-normal leading-tight text-[#2d8a62]">
+                  {roleValue.trim() || "Position preview"}
+                </p>
+              </div>
+            </article>
+
+            <button
+              type="button"
+              onClick={() => setIsPreviewOpen(false)}
+              className="mt-4 h-[40px] w-full rounded-full bg-[#268257] text-[14px] font-medium text-white shadow-sm"
+            >
+              Back to edit
+            </button>
           </div>
         </div>
       ) : null}

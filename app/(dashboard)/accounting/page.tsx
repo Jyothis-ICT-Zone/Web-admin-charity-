@@ -23,6 +23,7 @@ export default function AdminAccountingPage() {
   const [items, setItems] = useState<AccountingCard[]>(defaultCards);
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   /** When set, form is editing this card; when null, form is add mode */
@@ -67,6 +68,7 @@ export default function AdminAccountingPage() {
 
   const closeAddModal = () => {
     setIsAddModalOpen(false);
+    setIsPreviewOpen(false);
     setIsSaveConfirmOpen(false);
     setEditingItemId(null);
     setTitleValue("");
@@ -76,6 +78,7 @@ export default function AdminAccountingPage() {
   };
 
   const openAddModal = () => {
+    setIsPreviewOpen(false);
     setIsSaveConfirmOpen(false);
     setEditingItemId(null);
     setTitleValue("");
@@ -86,6 +89,7 @@ export default function AdminAccountingPage() {
   };
 
   const openEditModal = (card: AccountingCard) => {
+    setIsPreviewOpen(false);
     setIsSaveConfirmOpen(false);
     const latest = items.find((item) => item.id === card.id) ?? card;
     setEditingItemId(latest.id);
@@ -99,6 +103,7 @@ export default function AdminAccountingPage() {
   const handleFormSubmit = () => {
     const trimmedTitle = titleValue.trim();
     if (!trimmedTitle) return;
+    setIsPreviewOpen(false);
     setIsSaveConfirmOpen(true);
   };
 
@@ -326,14 +331,64 @@ export default function AdminAccountingPage() {
                 />
               </div>
 
+              <div className="mt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewOpen(true)}
+                  className="h-[38px] w-full rounded-full border border-[#268257] bg-[#F9F5F0] text-[13px] font-medium text-[#268257]"
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFormSubmit}
+                  className="h-[38px] w-full rounded-full bg-[#268257] text-[13px] font-medium text-white"
+                >
+                  {editingItemId !== null ? "Save" : "Add"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isPreviewOpen ? (
+        <div className="fixed inset-0 z-[45] grid place-items-center bg-black/45 px-4">
+          <div className="w-full max-w-[430px] rounded-[24px] bg-white px-6 py-5 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-[12px] text-zinc-500">User side preview</p>
+                <h3 className="text-[18px] font-semibold text-[#1f4f2c]">Before save preview</h3>
+              </div>
               <button
                 type="button"
-                onClick={handleFormSubmit}
-                className="mt-1 h-[38px] w-full rounded-full bg-[#268257] text-[13px] font-medium text-white"
+                onClick={() => setIsPreviewOpen(false)}
+                className="grid h-8 w-8 place-items-center rounded-md border border-zinc-200 text-zinc-600"
               >
-                {editingItemId !== null ? "Save" : "Add"}
+                ×
               </button>
             </div>
+
+            <article className="mx-auto h-[169px] w-full max-w-[260px] overflow-hidden rounded-[28px] border border-zinc-300 bg-white p-3 shadow-sm">
+              <div className="flex h-[102px] flex-col items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/picture/accounting.svg" alt="Accounting PDF" className="h-[58px] w-[58px]" />
+                <p className="mt-2 text-[15px] font-semibold leading-none text-[#1f4f2c]">
+                  {titleValue.trim() || "Year preview"}
+                </p>
+              </div>
+              <p className="truncate text-center text-[12px] text-[#2d8a62]">
+                {pdfName || "PDF not selected"}
+              </p>
+            </article>
+
+            <button
+              type="button"
+              onClick={() => setIsPreviewOpen(false)}
+              className="mt-4 h-[38px] w-full rounded-full bg-[#268257] text-[13px] font-medium text-white"
+            >
+              Back to edit
+            </button>
           </div>
         </div>
       ) : null}
